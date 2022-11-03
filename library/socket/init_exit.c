@@ -14,21 +14,17 @@
 #include "stdlib_constructor.h"
 #endif /* _STDLIB_CONSTRUCTOR_H */
 
-/****************************************************************************/
-
 struct Library *NOCOMMON __SocketBase;
 struct SocketIFace *NOCOMMON __ISocket;
 
 int NOCOMMON h_errno;
 
 /* Call-back hook for use with SBTC_ERROR_HOOK */
-struct _ErrorHookMsg
-{
-	ULONG ehm_Size;	  /* Size of this data structure; this
+struct _ErrorHookMsg {
+	ULONG ehm_Size;	    /* Size of this data structure; this
 						   must be >= 12 */
-	ULONG ehm_Action; /* See below for a list of definitions */
-
-	LONG ehm_Code; /* The error code to use */
+	ULONG ehm_Action;   /* See below for a list of definitions */
+	LONG ehm_Code;      /* The error code to use */
 };
 
 /* Which action the hook is to perform */
@@ -54,8 +50,7 @@ STATIC LONG ASM
 	error_hook_function(
 		REG(a0, struct Hook *unused_hook),
 		REG(a2, APTR unused_reserved),
-		REG(a1, struct _ErrorHookMsg *ehm))
-{
+		REG(a1, struct _ErrorHookMsg *ehm)) {
     (void) (unused_hook);
     (void) (unused_reserved);
 
@@ -70,20 +65,18 @@ STATIC LONG ASM
 	return (0);
 }
 
-STATIC struct Hook error_hook =
-	{
-		{NULL, NULL},
-		(HOOKFUNC)error_hook_function,
-		(HOOKFUNC)NULL,
-		NULL};
+STATIC struct Hook error_hook =  {
+    {NULL, NULL},
+    (HOOKFUNC)error_hook_function,
+    (HOOKFUNC)NULL,
+    NULL
+};
 
-SOCKET_DESTRUCTOR(socket_exit)
-{
+SOCKET_DESTRUCTOR(socket_exit) {
 	ENTER();
 
 	/* Disable ^C checking. */
-	if (__SocketBase != NULL)
-	{
+	if (__SocketBase != NULL) {
 		struct TagItem tags[2];
 
 		tags[0].ti_Tag = SBTM_SETVAL(SBTC_BREAKMASK);
@@ -100,13 +93,11 @@ SOCKET_DESTRUCTOR(socket_exit)
 	 *          crash (with bells on).
 	 */
 	__close_all_files();
-	if (__ISocket != NULL)
-	{
+	if (__ISocket != NULL) {
 		DropInterface((struct Interface *)__ISocket);
 		__ISocket = NULL;
 	}
-	if (__SocketBase != NULL)
-	{
+	if (__SocketBase != NULL) {
 		CloseLibrary(__SocketBase);
 		__SocketBase = NULL;
 	}
@@ -114,10 +105,7 @@ SOCKET_DESTRUCTOR(socket_exit)
 	LEAVE();
 }
 
-/****************************************************************************/
-
-SOCKET_CONSTRUCTOR(socket_init)
-{
+SOCKET_CONSTRUCTOR(socket_init) {
 	struct TagItem tags[5];
 	BOOL success = FALSE;
 	LONG status;
@@ -127,8 +115,7 @@ SOCKET_CONSTRUCTOR(socket_init)
 	/* bsdsocket.library V3 is sufficient for all the tasks we
 	   may have to perform. */
 	__SocketBase = OpenLibrary("bsdsocket.library", 3);
-	if (__SocketBase != NULL)
-	{
+	if (__SocketBase != NULL) {
 		__ISocket = (struct SocketIFace *)GetInterface(__SocketBase, "main", 1, 0);
 		if (__ISocket == NULL)
 		{
@@ -137,8 +124,7 @@ SOCKET_CONSTRUCTOR(socket_init)
 		}
 	}
 
-	if (__SocketBase == NULL)
-	{
+	if (__SocketBase == NULL) {
 		SHOWMSG("bsdsocket.library V3 didn't open");
 
 		__show_error("\"bsdsocket.library\" V3 could not be opened.");

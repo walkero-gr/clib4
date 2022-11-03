@@ -32,17 +32,15 @@
 
 extern int main(int arg_c, char **arg_v);
 
-BOOL open_libraries(void);
 void close_libraries(void);
 
 /* This will be set to TRUE in case a stack overflow was detected. */
 BOOL NOCOMMON __stack_overflow;
+extern jmp_buf NOCOMMON __exit_jmp_buf;
 extern struct _clib2 NOCOMMON *__global_clib2;
 
 extern struct Library *__ElfBase;
 extern struct ElfIFace *__IElf;
-
-#define MIN_OS_VERSION 52
 
 void
 close_libraries(void) {
@@ -83,17 +81,6 @@ call_main(void) {
 
     ENTER();
 
-    /* This plants the return buffer for _exit(). */
-    if (setjmp(__exit_jmp_buf) != 0) {
-        goto out;
-    }
-
-    reent_init();
-
-    SHOWMSG("now invoking the constructors");
-    /* Go through the constructor list */
-    _init();
-
     /* This can be helpful for debugging purposes: print the name of the current
        directory, followed by the name of the command and all the parameters
        passed to it. */
@@ -129,19 +116,16 @@ call_main(void) {
     /* After all these preparations, get this show on the road... */
     exit(main((int) __argc, (char **) __argv));
 
-out:
-
     /* Save the current IoErr() value in case it is needed later. */
     saved_io_err = IoErr();
 
     /* From this point on, don't worry about ^C checking any more. */
     __check_abort_enabled = FALSE;
 
-    /* If we end up here with the __stack_overflow variable
-       set then the stack overflow handler dropped into
-       longjmp() and exit() did not get called. This
-       means that we will have to show the error message
-       and invoke exit() all on our own. */
+    /* If we end up here with the __stack_overflow variable set then the stack overflow handler dropped into
+       longjmp() and exit() did not get called. This means that we will have to show the error message
+       and invoke exit() all on our own.
+    */
     if (__stack_overflow) {
         SHOWMSG("we have a stack overflow");
 
@@ -187,47 +171,8 @@ out:
     return (__exit_value);
 }
 
-BOOL
-open_libraries(void) {
-    BOOL success = FALSE;
-
-    /* Open the minimum required libraries. */
-    DOSBase = (struct Library *) OpenLibrary("dos.library", MIN_OS_VERSION);
-    if (DOSBase == NULL)
-        goto out;
-
-    __UtilityBase = OpenLibrary("utility.library", MIN_OS_VERSION);
-    if (__UtilityBase == NULL)
-        goto out;
-
-    /* Obtain the interfaces for these libraries. */
-    IDOS = (struct DOSIFace *) GetInterface(DOSBase, "main", 1, 0);
-    if (IDOS == NULL)
-        goto out;
-
-    __IUtility = (struct UtilityIFace *) GetInterface(__UtilityBase, "main", 1, 0);
-    if (__IUtility == NULL)
-        goto out;
-
-    /* We need elf.library V52.2 or higher. */
-    __ElfBase = OpenLibrary("elf.library", 0);
-    if (__ElfBase == NULL || (__ElfBase->lib_Version < MIN_OS_VERSION) ||
-        (__ElfBase->lib_Version == MIN_OS_VERSION && __ElfBase->lib_Revision < 2))
-        goto out;
-
-    __IElf = (struct ElfIFace *) GetInterface(__ElfBase, "main", 1, NULL);
-    if (__IElf == NULL)
-        goto out;
-
-    success = TRUE;
-
-    out:
-
-    return (success);
-}
-
-STATIC VOID detach_cleanup(int32_t return_code, int32_t exit_data, struct ExecBase *sysBase)
-{
+STATIC VOID
+detach_cleanup(int32_t return_code, int32_t exit_data, struct ExecBase *sysBase) {
     (void) (return_code);
     (void) (exit_data);
     (void) (sysBase);
@@ -252,7 +197,7 @@ STATIC ULONG get_stack_size(void) {
 }
 
 int
-_main() {
+_main(struct ExecBase *sysBase) {
     struct Process *volatile child_process = NULL;
     struct WBStartup *volatile startup_message;
     volatile APTR old_window_pointer = NULL;
@@ -261,8 +206,7 @@ _main() {
     int return_code = RETURN_FAIL;
     ULONG current_stack_size;
 
-    SysBase = *(struct Library **) 4;
-    IExec = (struct ExecIFace *) ((struct ExecBase *) SysBase)->MainInterface;
+    IExec = (struct ExecIFace *) ((struct ExecBase *) sysBase)->MainInterface;
 
     /* Pick up the Workbench startup message, if available. */
     this_process = (struct Process *) FindTask(NULL);
@@ -278,20 +222,6 @@ _main() {
     }
 
     __WBenchMsg = (struct WBStartup *) startup_message;
-
-    /* Try to open the libraries we need to proceed. */
-    if (CANNOT open_libraries()) {
-        const char *error_message;
-
-        /* If available, use the error message provided by the client. */
-        error_message = __minimum_os_lib_error;
-
-        if (error_message == NULL)
-            error_message = "This program requires AmigaOS 4.0 (52.2) or higher.";
-
-        __show_error(error_message);
-        goto out;
-    }
 
     if (__disable_dos_requesters) {
         /* Don't display any requesters. */

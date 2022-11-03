@@ -36,8 +36,7 @@ struct WBStartup *NOCOMMON __WBenchMsg;
 /* CPU cache line size; used to align I/O buffers for best performance. */
 ULONG __cache_line_size = 32;
 
-FILE_DESTRUCTOR(workbench_exit)
-{
+FILE_DESTRUCTOR(workbench_exit) {
     ENTER();
 
     /* Now clean up after the streams set up for Workbench startup... */
@@ -143,8 +142,7 @@ out:
     return (result);
 }
 
-FILE_CONSTRUCTOR(stdio_file_init)
-{
+FILE_CONSTRUCTOR(stdio_file_init) {
     struct SignalSemaphore *stdio_lock;
     struct SignalSemaphore *fd_lock;
     BPTR default_file;

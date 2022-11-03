@@ -153,7 +153,7 @@ typedef struct pthread_mutex pthread_mutex_t;
 #define NULL_SEMAPHOREREQUEST {NULL_MINNODE, 0}
 #define NULL_SEMAPHORE {NULL_NODE, 0, NULL_MINLIST, NULL_SEMAPHOREREQUEST, 0, 0}
 
-#define PTHREAD_MUTEX_INITIALIZER {PTHREAD_MUTEX_NORMAL, NULL_SEMAPHORE}
+#define PTHREAD_MUTEX_INITIALIZER {PTHREAD_MUTEX_NORMAL, NULL_SEMAPHORE, 0}
 #define PTHREAD_RECURSIVE_MUTEX_INITIALIZER {PTHREAD_MUTEX_RECURSIVE, NULL_SEMAPHORE}
 #define PTHREAD_ERRORCHECK_MUTEX_INITIALIZER {PTHREAD_MUTEX_ERRORCHECK, NULL_SEMAPHORE}
 
@@ -318,6 +318,8 @@ int pthread_condattr_init(pthread_condattr_t *attr);
 int pthread_condattr_destroy(pthread_condattr_t *attr);
 int pthread_condattr_getpshared(const pthread_condattr_t *attr, int *pshared);
 int pthread_condattr_setpshared(pthread_condattr_t *attr, int pshared);
+int pthread_condattr_getclock(const pthread_condattr_t *restrict a, clockid_t *restrict clk);
+int pthread_condattr_setclock(pthread_condattr_t *a, clockid_t clk);
 
 //
 // Condition variable functions

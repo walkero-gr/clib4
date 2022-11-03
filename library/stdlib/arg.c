@@ -65,15 +65,13 @@ is_final_quote_character(const unsigned char *str)
 	return (result);
 }
 
-ARG_CONSTRUCTOR(arg_init)
-{
+ARG_CONSTRUCTOR(arg_init) {
 	BOOL success = FALSE;
 
 	ENTER();
 
 	/* Shell startup? */
-	if (__WBenchMsg == NULL)
-	{
+	if (__WBenchMsg == NULL) {
 		BOOL expand_wildcard_args = FALSE;
 		size_t number_of_arguments;
 		const unsigned char *arg_str;
@@ -123,8 +121,7 @@ ARG_CONSTRUCTOR(arg_init)
 		/* Count the number of arguments. */
 		number_of_arguments = 1;
 
-		while (TRUE)
-		{
+		while (TRUE) {
 			/* Skip leading blank space. */
 			while ((*str) != '\0' && is_space(*str))
 				str++;
@@ -135,8 +132,7 @@ ARG_CONSTRUCTOR(arg_init)
 			number_of_arguments++;
 
 			/* Quoted parameter starts here? */
-			if ((*str) == '\"')
-			{
+			if ((*str) == '\"') {
 				str++;
 
 				/* Skip the quoted string. */
@@ -160,8 +156,7 @@ ARG_CONSTRUCTOR(arg_init)
 				if ((*str) != '\0')
 					str++;
 			}
-			else
-			{
+			else {
 				/* Skip the parameter. */
 				while ((*str) != '\0' && NOT is_space(*str))
 					str++;
@@ -185,8 +180,7 @@ ARG_CONSTRUCTOR(arg_init)
 
 		__argc = 1;
 
-		while (TRUE)
-		{
+		while (TRUE) {
 			/* Skip leading blank space. */
 			while ((*str) != '\0' && is_space(*str))
 				str++;
@@ -213,10 +207,8 @@ ARG_CONSTRUCTOR(arg_init)
 				arg = (char *)str;
 
 				/* Process the quoted string. */
-				while ((*str) != '\0' && NOT is_final_quote_character(str))
-				{
-					if (is_escape_character(*str))
-					{
+				while ((*str) != '\0' && NOT is_final_quote_character(str)) {
+					if (is_escape_character(*str)) {
 						str++;
 
 						switch (*str)
@@ -249,8 +241,7 @@ ARG_CONSTRUCTOR(arg_init)
 						if ((*str) != '\0')
 							str++;
 					}
-					else
-					{
+					else {
 						(*arg++) = (*str++);
 					}
 				}
@@ -263,8 +254,7 @@ ARG_CONSTRUCTOR(arg_init)
 				   actually overwrites the final quote character. */
 				(*arg) = '\0';
 			}
-			else
-			{
+			else {
 				__argv[__argc++] = (char *)str;
 
 				while ((*str) != '\0' && NOT is_space(*str))
@@ -282,16 +272,14 @@ ARG_CONSTRUCTOR(arg_init)
 
 		__argv[__argc] = NULL;
 
-		if (__unix_path_semantics)
-		{
+		if (__unix_path_semantics) {
 			/* If necessary, expand wildcard patterns found in the command
 			   line string into file and directory names. */
 			if (expand_wildcard_args && __wildcard_expand_init() < 0)
 				goto out;
 		}
 	}
-	else
-	{
+	else {
 		/* Return a pointer to the startup message in place of the
 		   the argument vector. The argument counter (what will come
 		   out as 'argc' for the main() function) will remain 0. */

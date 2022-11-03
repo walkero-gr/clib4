@@ -63,6 +63,12 @@ struct flock {
 #define FD_CLOEXEC  1   /* posix */
 #define AT_FDCWD    (-100) /* openat */
 
+#define FAPPEND O_APPEND
+#define FFSYNC O_SYNC
+#define FASYNC O_ASYNC
+#define FNONBLOCK O_NONBLOCK
+#define FNDELAY O_NDELAY
+
 extern int open(const char *path_name, int open_flag, ... /* mode_t mode */ );
 extern int openat(int fd, const char *filename, int flags, ...);
 extern int creat(const char * path_name, mode_t mode);

@@ -176,8 +176,7 @@ CLIB_DESTRUCTOR(locale_exit)
 	LEAVE();
 }
 
-CLIB_CONSTRUCTOR(locale_init)
-{
+CLIB_CONSTRUCTOR(locale_init) {
 	BOOL success = FALSE;
 	int i;
 

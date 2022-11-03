@@ -177,8 +177,9 @@ $(OUTPUT_LIB)/%.o : CFLAGS += $(LARGEDATA)
 $(OUTPUT_LIB)/%.o : %.c
 	$(VERBOSE)$(COMPILE)
 
-$(OUTPUT_LIB)/crt0.o : $(LIB_DIR)/crt0.S
-	$(VERBOSE)$(ASSEMBLE)
+$(OUTPUT_LIB)/crt0.o : CFLAGS += -fno-aggressive-loop-optimizations
+$(OUTPUT_LIB)/crt0.o : $(LIB_DIR)/crt0.c
+	$(VERBOSE)$(COMPILE)
 	-$(COPY) $(OUTPUT_LIB)/crt0.o $(INSTALL_PREFIX)/lib/
 
 $(OUTPUT_LIB)/crtbegin.o : CFLAGS += -fno-aggressive-loop-optimizations

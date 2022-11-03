@@ -42,7 +42,9 @@ C_PTHREAD := \
     pthread/pthread_cond_timedwait_relative_np.o \
     pthread/pthread_cond_wait.o \
     pthread/pthread_condattr_destroy.o \
+    pthread/pthread_condattr_getclock.o \
     pthread/pthread_condattr_init.o \
+    pthread/pthread_condattr_setclock.o \
     pthread/pthread_create.o \
     pthread/pthread_detach.o \
     pthread/pthread_equal.o \

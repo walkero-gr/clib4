@@ -18,8 +18,7 @@ float NOCOMMON __huge_val_float;
 long double NOCOMMON __huge_val_long_double;
 double NOCOMMON __huge_val;
 
-MATH_CONSTRUCTOR(math_init)
-{
+MATH_CONSTRUCTOR(math_init) {
     union ieee_double *double_x;
     union ieee_single *single_x;
     union ieee_long_double *x;

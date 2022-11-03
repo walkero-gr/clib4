@@ -24,8 +24,6 @@
 
 #endif /* __NEW_TIMEVAL_DEFINITION_USED__ */
 
-/****************************************************************************/
-
 /* Local timer I/O. */
 struct MsgPort *NOCOMMON __timer_port;
 struct timerequest *NOCOMMON __timer_request;
@@ -34,10 +32,7 @@ BOOL NOCOMMON __timer_busy;
 struct Library *NOCOMMON __TimerBase;
 struct TimerIFace *NOCOMMON __ITimer;
 
-/****************************************************************************/
-
-CLIB_CONSTRUCTOR(timer_init)
-{
+CLIB_CONSTRUCTOR(timer_init) {
 	BOOL success = FALSE;
 
 	ENTER();
@@ -77,7 +72,7 @@ CLIB_CONSTRUCTOR(timer_init)
     __global_clib2->__random_seed = time(NULL);
 
 
-success = TRUE;
+    success = TRUE;
 
 out:
 

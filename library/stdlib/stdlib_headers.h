@@ -81,7 +81,6 @@
 #include "debug.h"
 #endif /* _DEBUG_H */
 
-extern jmp_buf NOCOMMON __exit_jmp_buf;
 extern int NOCOMMON		__exit_value;
 
 extern unsigned int NOCOMMON (* __get_default_stack_size)(void);

@@ -108,8 +108,7 @@ __timezone_unlock(void) {
         ReleaseSemaphore(timezone_lock);
 }
 
-CLIB_DESTRUCTOR(timezone_exit)
-{
+CLIB_DESTRUCTOR(timezone_exit) {
     ENTER();
 
     __timezone_exit();
@@ -120,8 +119,7 @@ CLIB_DESTRUCTOR(timezone_exit)
     LEAVE();
 }
 
-CLIB_CONSTRUCTOR(timezone_init)
-{
+CLIB_CONSTRUCTOR(timezone_init) {
     BOOL success = FALSE;
 
     ENTER();

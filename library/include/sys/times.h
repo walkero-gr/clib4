@@ -3,6 +3,8 @@
 
 #include <features.h>
 
+#include <time.h>
+
 __BEGIN_DECLS
 
 /* Structure describing CPU time used by a process and its children.  */
