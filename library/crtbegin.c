@@ -38,27 +38,26 @@ void _init(void) {
     int num_ctors, i;
     int j;
 
-    /* The shared objects need to be set up before any local constructors are invoked. */
-    shared_obj_init();
-
     for (i = 1, num_ctors = 0; __CTOR_LIST__[i] != NULL; i++)
         num_ctors++;
 
     for (j = 0; j < num_ctors; j++)
         __CTOR_LIST__[num_ctors - j]();
+
+    /* The shared objects need to be set up before any local constructors are invoked. */
+    shared_obj_init();
 }
 
 void _fini(void) {
     int num_dtors, i;
     static int j;
 
+    /* The shared objects need to be cleaned up after all local destructors have been invoked. */
+    shared_obj_exit();
+
     for (i = 1, num_dtors = 0; __DTOR_LIST__[i] != NULL; i++)
         num_dtors++;
 
     while (j++ < num_dtors)
         __DTOR_LIST__[j]();
-
-    /* The shared objects need to be cleaned up after all local
-       destructors have been invoked. */
-    shared_obj_exit();
 }

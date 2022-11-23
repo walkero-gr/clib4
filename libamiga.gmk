@@ -65,5 +65,5 @@ $(OUT_SHARED)/%.o : $(LIB_DIR)/%.c
 $(OUTPUT_LIB)/libamiga.a : $(SOURCES_STATIC)
 	$(VERBOSE)$(MAKELIB)
 
-$(OUTPUT_LIB)/libamiga.so : $(OUTPUT_LIB)/libc.so $(SOURCES_SHARED)
+$(OUTPUT_LIB)/libamiga.so : $(SOURCES_SHARED)
 	$(VERBOSE)$(MAKESHARED)

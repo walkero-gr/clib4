@@ -48,5 +48,5 @@ $(OUT_SHARED)/%.o : $(LIB_DIR)/%.c
 $(OUTPUT_LIB)/libcrypt.a : $(SOURCES_STATIC)
 	$(VERBOSE)$(MAKELIB)
 
-$(OUTPUT_LIB)/libcrypt.so : $(OUTPUT_LIB)/libc.so $(SOURCES_SHARED)
+$(OUTPUT_LIB)/libcrypt.so : $(SOURCES_SHARED)
 	$(VERBOSE)$(MAKESHARED)

@@ -65,13 +65,6 @@ CLIB_CONSTRUCTOR(timer_init) {
 		goto out;
 	}
 
-    /* Set system time for rusage */
-    struct TimerIFace *ITimer = __ITimer;
-    GetSysTime(&__global_clib2->clock);
-    /* Generate random seed */
-    __global_clib2->__random_seed = time(NULL);
-
-
     success = TRUE;
 
 out:
@@ -95,11 +88,9 @@ CLIB_DESTRUCTOR(timer_exit)
 		DropInterface((struct Interface *)__ITimer);
 
 	__ITimer = NULL;
-
 	__TimerBase = NULL;
 
-	if (__timer_request != NULL)
-	{
+	if (__timer_request != NULL) {
 		if (__timer_request->tr_node.io_Device != NULL)
 			CloseDevice((struct IORequest *)__timer_request);
 
@@ -107,8 +98,7 @@ CLIB_DESTRUCTOR(timer_exit)
 		__timer_request = NULL;
 	}
 
-	if (__timer_port != NULL)
-	{
+	if (__timer_port != NULL) {
 		FreeSysObject(ASOT_PORT, __timer_port);
 		__timer_port = NULL;
 	}

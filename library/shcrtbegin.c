@@ -34,8 +34,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <proto/exec.h>
+#ifndef _STDLIB_HEADERS_H
+#include "stdlib_headers.h"
+#endif /* _STDLIB_HEADERS_H */
 
+#include <proto/exec.h>
 
 /* Avoid gcc warnings.. */
 void __shlib_call_constructors(void);
@@ -48,25 +51,58 @@ static void (*__DTOR_LIST__[1])(void) __attribute__((used, section(".dtors"), al
 
 void _init(void) {}
 void _fini(void) {}
+static BOOL success = FALSE;
 
-void __shlib_call_constructors(void)
-{
-    int i = 0;
+#define MIN_OS_VERSION 52
 
-    while (__CTOR_LIST__[i + 1]) {
-        i++;
-    }
+static BOOL
+open_libraries(VOID) {
+    /* Open the minimum required libraries. */
+    DOSBase = (struct Library *)OpenLibrary("dos.library", MIN_OS_VERSION);
+    if (DOSBase == NULL)
+        goto out;
 
-    while (i > 0) {
-        __CTOR_LIST__[i--]();
+    __UtilityBase = OpenLibrary("utility.library", MIN_OS_VERSION);
+    if (__UtilityBase == NULL)
+        goto out;
+
+    /* Obtain the interfaces for these libraries. */
+    IDOS = (struct DOSIFace *)GetInterface(DOSBase, "main", 1, 0);
+    if (IDOS == NULL)
+        goto out;
+
+    __IUtility = (struct UtilityIFace *)GetInterface(__UtilityBase, "main", 1, 0);
+    if (__IUtility == NULL)
+    goto out;
+
+    success = TRUE;
+
+out:
+
+    return(success);
+}
+
+void __shlib_call_constructors(void) {
+    if (open_libraries()) {
+        int i = 0;
+
+        while (__CTOR_LIST__[i + 1]) {
+            i++;
+        }
+
+        while (i > 0) {
+            Printf("i1 = %ld\n", i);
+            __CTOR_LIST__[i--]();
+        }
     }
 }
 
-void __shlib_call_destructors(void)
-{
-    int i = 1;
+void __shlib_call_destructors(void) {
+    if (success) {
+        int i = 1;
 
-    while (__DTOR_LIST__[i]) {
-        __DTOR_LIST__[i++]();
+        while (__DTOR_LIST__[i]) {
+            __DTOR_LIST__[i++]();
+        }
     }
 }

@@ -309,5 +309,5 @@ $(OUT_SHARED)/%.o : $(LIB_DIR)/%.c
 $(BUILD_DIR)/lib/libm.a : $(SOURCES_STATIC)
 	$(VERBOSE)$(MAKELIB)
 
-$(BUILD_DIR)/lib/libm.so : $(OUTPUT_LIB)/libc.so $(SOURCES_SHARED)
+$(BUILD_DIR)/lib/libm.so : $(SOURCES_SHARED)
 	$(VERBOSE)$(MAKESHARED)

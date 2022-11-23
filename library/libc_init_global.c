@@ -100,9 +100,8 @@ reent_init() {
         __global_clib2->j = 0;
         __global_clib2->x = _random_init + 1;
 
-        /* Set main Exec and IElf interface pointers */
+        /* Set main Exec interface pointer */
         __global_clib2->IExec = IExec;
-        __global_clib2->IElf = __IElf;
 
         __global_clib2->wide_status->_strtok_last = NULL;
         __global_clib2->wide_status->_mblen_state.__count = 0;
