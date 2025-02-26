@@ -26,8 +26,9 @@ jobs:
     needs: [check]
     runs-on: ubuntu-latest
     if: needs.check.outputs.last_sha != github.sha
-    run: |
-      echo "Building new version"
-      echo "Last daily build: ${{ needs.check.outputs.last_sha }}"
-      echo "Current build: ${{ github.sha }}"
+    steps:
+      - run: |
+          echo "Building new version"
+          echo "Last daily build: ${{ needs.check.outputs.last_sha }}"
+          echo "Current build: ${{ github.sha }}"
 
