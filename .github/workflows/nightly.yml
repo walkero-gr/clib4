@@ -2,7 +2,7 @@ name:  Nightly beta build
 
 on:
   schedule:
-    - cron: "30 01 * * *"
+    - cron: "55 21 * * *"
 
 jobs:
   check:
