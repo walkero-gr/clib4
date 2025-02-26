@@ -19,8 +19,8 @@ jobs:
           echo ${{github.repository}}
           echo "Last daily build: ${{ fromJson(steps.checkLastRun.outputs.data).workflow_runs[0].head_sha }}"
 
-      - outputs:
-          last_sha: ${{ fromJson(steps.checkLastRun.outputs.data).workflow_runs[0].head_sha }}
+    outputs:
+      last_sha: ${{ fromJson(steps.checkLastRun.outputs.data).workflow_runs[0].head_sha }}
 
   build:
     needs: [check]
