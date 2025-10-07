@@ -12,12 +12,21 @@
 
 int
 open(const char *path_name, int open_flag, ... /* mode_t mode */) {
+    struct _clib4 *__clib4 = __CLIB4;
+    va_list ap;
+    va_start(ap, open_flag);
+    return __open_r(__clib4, path_name, open_flag, va_arg(ap, int));
+    va_end(ap);
+}
+
+int
+__open_r(struct _clib4 *__clib4, const char *path_name, int open_flag, ... /* mode_t mode */) {
     DECLARE_UTILITYBASE();
     struct name_translation_info path_name_nti;
     struct ExamineData *fib = NULL;
-    struct SignalSemaphore *fd_lock;
+    APTR fd_lock;
     LONG is_file_system = FALSE;
-    LONG open_mode;
+    LONG open_mode = 0;
     BPTR lock = BZERO, dir_lock = BZERO;
     BPTR handle = BZERO;
     BOOL create_new_file = FALSE;
@@ -28,7 +37,6 @@ open(const char *path_name, int open_flag, ... /* mode_t mode */) {
     int result = ERROR;
     int i;
     BOOL is_directory = FALSE;
-    struct _clib4 *__clib4 = __CLIB4;
 
     ENTER();
 
@@ -252,7 +260,7 @@ open(const char *path_name, int open_flag, ... /* mode_t mode */) {
 
 directory:
 
-    fd_lock = __create_semaphore();
+    fd_lock = __create_mutex();
     if (fd_lock == NULL) {
         __set_errno(ENOMEM);
         goto out;
@@ -260,10 +268,12 @@ directory:
 
     fd = __clib4->__fd[fd_slot_number];
 
-    if (is_directory || FLAG_IS_SET(open_flag, O_PATH))
+    if (is_directory || FLAG_IS_SET(open_flag, O_PATH)) {
         __initialize_fd(fd, __fd_hook_entry, dir_lock, 0, fd_lock); // TODO - Create a new dir hook
-    else
+    }
+    else {
         __initialize_fd(fd, __fd_hook_entry, handle, 0, fd_lock);
+    }
 
     fd->fd_Aux = (char *) path_name;
 
@@ -356,6 +366,11 @@ directory:
         if (create_new_file && is_file_system)
             SET_FLAG(fd->fd_Flags, FDF_CREATED);
     }
+    if (FLAG_IS_SET(open_flag, O_LITTLE_ENDIAN)) {
+        SHOWMSG("open() called with Little Endian mode\n");
+        D(("%ld\n", fd_slot_number));
+        SET_FLAG(fd->fd_Flags, FDF_LITTLE_ENDIAN);
+    }
 
     SET_FLAG(fd->fd_Flags, FDF_IN_USE);
 
@@ -368,9 +383,14 @@ out:
     if (handle != BZERO)
         Close(handle);
 
-    FreeDosObject(DOS_EXAMINEDATA, fib);
+    if (fib != NULL)
+        FreeDosObject(DOS_EXAMINEDATA, fib);
+
     if (lock != BZERO)
         UnLock(lock);
+
+    if (!is_directory && dir_lock != BZERO)
+      	UnLock(dir_lock);
 
     __stdio_unlock(__clib4);
 

@@ -16,7 +16,7 @@ __initialize_iob(
 	int file_descriptor,
 	int slot_number,
 	ULONG flags,
-	struct SignalSemaphore *lock)
+	APTR lock)
 {
     ENTER();
 	assert(iob != NULL && action_function != NULL);
@@ -24,6 +24,7 @@ __initialize_iob(
 	memset(iob, 0, sizeof(*iob));
 
 	iob->iob_CustomBuffer = custom_buffer;
+	iob->iob_isVBuffer = FALSE;
 	iob->iob_Buffer = (UBYTE *)buffer;
 	iob->iob_BufferSize = buffer_size;
 	iob->iob_Descriptor = file_descriptor;
