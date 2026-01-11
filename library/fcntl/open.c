@@ -129,6 +129,9 @@ __open_r(struct _clib4 *__clib4, const char *path_name, int open_flag, ... /* mo
             if (lock != BZERO) {
                 SHOWMSG("the file already exists");
 
+                UnLock(lock);
+                lock = BZERO;
+
                 __set_errno(EEXIST);
                 goto out;
             }
@@ -149,6 +152,7 @@ __open_r(struct _clib4 *__clib4, const char *path_name, int open_flag, ... /* mo
 
 			SHOWMSG("the object does not already exist");
         }
+		open_mode = MODE_READWRITE;
 
         if (FLAG_IS_SET(open_flag, O_TRUNC)) {
             SHOWMSG("checking if the file to create already exists");
@@ -180,6 +184,8 @@ __open_r(struct _clib4 *__clib4, const char *path_name, int open_flag, ... /* mo
                     goto out;
                 }
 
+            	open_mode = MODE_NEWFILE;
+
                 UnLock(lock);
                 lock = BZERO;
             } else {
@@ -199,7 +205,6 @@ __open_r(struct _clib4 *__clib4, const char *path_name, int open_flag, ... /* mo
                 }
             }
         }
-		open_mode = MODE_NEWFILE;
         create_new_file = TRUE;
     }
     else {
@@ -272,6 +277,12 @@ directory:
     /* If O_PATH is set only stat* functions can be used */
     if (FLAG_IS_SET(open_flag, O_PATH))
         SET_FLAG(fd->fd_Flags, FDF_PATH_ONLY);
+
+    /* If O_CLOEXEC is set, mark the FD for close-on-exec */
+    if (FLAG_IS_SET(open_flag, O_CLOEXEC)) {
+        SET_FLAG(fd->fd_Flags, FDF_CLOEXEC);
+        D(("O_CLOEXEC set for fd=%d\n", fd_slot_number));
+    }
 
     if (is_directory) {
         /* Set FD flag as Directory */

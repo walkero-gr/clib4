@@ -176,21 +176,21 @@ FILE_CONSTRUCTOR(stdio_file_init) {
             case STDIN_FILENO:
 
                 iob_flags = IOBF_IN_USE | IOBF_READ | IOBF_NO_NUL | IOBF_BUFFER_MODE_LINE;
-                fd_flags = FDF_IN_USE | FDF_READ | FDF_NO_CLOSE | FDF_STDIO;
+                fd_flags = FDF_IN_USE | FDF_READ | FDF_NO_CLOSE_BPTR | FDF_STDIO;
                 default_file = Input();
                 break;
 
             case STDOUT_FILENO:
 
                 iob_flags = IOBF_IN_USE | IOBF_WRITE | IOBF_NO_NUL | IOBF_BUFFER_MODE_LINE;
-                fd_flags = FDF_IN_USE | FDF_WRITE | FDF_NO_CLOSE | FDF_STDIO;
+                fd_flags = FDF_IN_USE | FDF_WRITE | FDF_NO_CLOSE_BPTR | FDF_STDIO;
                 default_file = Output();
                 break;
 
             case STDERR_FILENO:
 
                 iob_flags = IOBF_IN_USE | IOBF_WRITE | IOBF_NO_NUL | IOBF_BUFFER_MODE_NONE;
-                fd_flags = FDF_IN_USE | FDF_WRITE | FDF_NO_CLOSE | FDF_STDIO;
+                fd_flags = FDF_IN_USE | FDF_WRITE | FDF_NO_CLOSE_BPTR | FDF_STDIO;
                 default_file = ErrorOutput();
                 break;
         }
@@ -207,11 +207,11 @@ FILE_CONSTRUCTOR(stdio_file_init) {
             goto out;
 
         /* Allocate memory for an arbitration mechanism, then initialize it. */
-        stdio_lock = __create_mutex();
+        stdio_lock = __create_semaphore();
         fd_lock = __create_mutex();
 
         if (stdio_lock == NULL || fd_lock == NULL) {
-            __delete_mutex(stdio_lock);
+            __delete_semaphore(stdio_lock);
             __delete_mutex(fd_lock);
             goto out;
         }

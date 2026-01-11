@@ -106,7 +106,7 @@ reent_init(struct _clib4 *__clib4, const BOOL fallback) {
         /* Clear itimer start time */
         .tmr_start_time.tv_sec = 0,
         .tmr_start_time.tv_usec = 0,
-        .tmr_real_task = NULL,
+		.unused = NULL, // OLD tmr_real_task pointer
         /* Set ar4random stuff */
         .rs.i = 0,
         .rs.j = 0,
@@ -145,14 +145,15 @@ reent_init(struct _clib4 *__clib4, const BOOL fallback) {
         .__children = 1,
         .term_entry = NULL,
         .__was_sig = -1,
-        .__wof_mem_allocator_type = WMEM_ALLOCATOR_BLOCK_FAST,
+        .__wof_mem_allocator_type = WMEM_ALLOCATOR_BLOCK,
         .allocated_memory_by_malloc = 0,
         .__environment_pool = NULL,
         .__num_iob = 0,
         .isTZSet = 0,
         .__IDebug = NULL,
         .resolv_conf = NULL,
-        .__file_lock_semaphore_name = "Advisory File Locking"
+        .__file_lock_semaphore_name = "Advisory File Locking",
+        .__command_line_ptr = NULL
     };
 
     if (!__clib4->__random_lock || !__clib4->__pipe_semaphore) {
@@ -232,6 +233,9 @@ reent_init(struct _clib4 *__clib4, const BOOL fallback) {
     }
 
     ClearMem(&__clib4->tmr_time, sizeof(struct itimerval));
+
+    /* Initialize timer list */
+    NewList((struct List *)&__clib4->tmr_real_list);
 
     /* Set ar4random stuff */
     for (int i = 0; i <= 255; i++) {

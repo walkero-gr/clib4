@@ -41,6 +41,57 @@ extern struct DOSIFace *_IDOS;
 
 static ThreadInfo *old_tls = NULL;
 
+static APTR
+hook_function(struct Hook *hook, APTR userdata, struct Process *process) {
+    uint32 pid = (uint32) userdata;
+    (void) (hook);
+
+    if (process->pr_ProcessID == pid) {
+        return process;
+    }
+
+    return 0;
+}
+
+// This is duplicate of killitimer() present in clib4 but is needed since it isn't exposed into interface
+static void killitimer_by_thread(uint32 threadID) {
+    struct _clib4 *__clib4 = __CLIB4;
+    struct TimerNode *node, *next;
+    
+    /* Scan the timer list for timers belonging to the specified thread */
+    for (node = (struct TimerNode *)__clib4->tmr_real_list.mlh_Head;
+         (next = (struct TimerNode *)node->tn_Node.mln_Succ) != NULL;
+         node = next) {
+        
+        if (node->tn_ThreadID == threadID) {
+            struct Hook h = {{NULL, NULL}, (HOOKFUNC) hook_function, NULL, NULL};
+            int32 pid, process;
+            
+            pid = node->tn_Process->pr_ProcessID;
+            /* Scan for process */
+            process = ProcessScan(&h, (CONST_APTR) pid, 0);
+            DebugPrintF("Scan for process %ld (%ld) of thread %lu..\n", process, pid, threadID);
+            
+            while (process > 0) {
+                DebugPrintF("Waiting for process %ld to close..\n", pid);
+                /* Send a SIGBREAKF_CTRL_F signal until the timer task return in Wait and can get the signal */
+                Signal((struct Task *)node->tn_Process, SIGBREAKF_CTRL_F);
+                process = ProcessScan(&h, (CONST_APTR) pid, 0);
+                Delay(10);
+            }
+            
+            DebugPrintF("Process closed.. Wait For Child\n");
+            WaitForChildExit(pid);
+            DebugPrintF("Done\n");
+            
+            /* Remove from list and free */
+            Remove((struct Node *)&node->tn_Node);
+            FreeVec(node);
+			node = NULL;
+        }
+    }
+}
+
 static uint32
 StarterFunc() {
     volatile int keyFound = TRUE;
@@ -54,7 +105,7 @@ StarterFunc() {
 
     set_tls_register(inf);
 
-    struct _clib4 *__clib4 = (struct _clib4 *) startedTask->pr_EntryData; // GetEntryData();
+    struct _clib4 *__clib4 = (struct _clib4 *) startedTask->pr_UID; // GetEntryData();
 
     // we have to set the priority here to avoid race conditions
     SetTaskPri((struct Task *) inf->task, inf->attr.param.sched_priority);
@@ -94,6 +145,15 @@ StarterFunc() {
         }
     }
     MutexRelease(tls_sem);
+
+    /*  If we have timer running tasks for this thread, stop them before exit  */
+    if (!IsMinListEmpty(&__clib4->tmr_real_list)) {
+        uint32 currentThreadID = (uint32)FindTask(NULL);
+        /* Block SIGALRM signal from raise */
+        sigblock(SIGALRM);
+        /* Kill itimer for current thread */
+        killitimer_by_thread(currentThreadID);
+    }
 
     if (stackSwapped)
         StackSwap(&stack);
