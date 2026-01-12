@@ -6,6 +6,7 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/elf.h>
+#include <proto/expansion.h>
 #include <proto/locale.h>
 #include <proto/timer.h>
 #include <proto/timezone.h>
@@ -258,6 +259,12 @@ makeEnvironment(struct _clib4 *__clib4) {
             IDOS->ScanVars(hook, flags, &ehd);
             IExec->FreeSysObject(ASOT_HOOK, hook);
         }
+    } else {
+        /* Failed to allocate pool, cleanup */
+        free(__clib4->__environment);
+        __clib4->__environment = NULL;
+        LEAVE();
+        return;
     }
 
     __clib4->__environment_lock = __create_recursive_mutex();
@@ -267,6 +274,7 @@ makeEnvironment(struct _clib4 *__clib4) {
 static void freeEnvironment(struct _clib4 *__clib4) {
     if (__clib4->__environment_pool != NULL) {
         IExec->FreeSysObject(ASOT_MEMPOOL, __clib4->__environment_pool);
+        __clib4->__environment_pool = NULL;
     }
     if (__clib4->__environment_lock != NULL) {
         __delete_mutex(__clib4->__environment_lock);
@@ -330,6 +338,20 @@ struct Clib4Library *libOpen(struct LibraryManagerInterface *Self, uint32 versio
     libBase->libNode.lib_Flags &= ~LIBF_DELEXP;
 
     DECLARE_UTILITYBASE();
+
+	struct Library *ExpansionBase = IExec->OpenLibrary("expansion.library", 53L);
+	if (ExpansionBase == NULL) {
+		SHOWMSG("Cannot open expansopn library!");
+		return NULL;
+	}
+
+	struct ExpansionIFace *IExpansion = (struct ExpansionIFace *) (IExec->GetInterface((struct Library *) ExpansionBase, "main", 1, NULL));
+	if (!IExpansion) {
+		SHOWMSG("Cannot obtain expansion interface!");
+		IExec->CloseLibrary(ExpansionBase);
+		ExpansionBase = NULL;
+		return NULL;
+	}
 
     struct Clib4Resource *res = (APTR) IExec->OpenResource(RESOURCE_NAME);
     uint32 pid;
@@ -425,6 +447,9 @@ struct Clib4Library *libOpen(struct LibraryManagerInterface *Self, uint32 versio
             __clib4->self = me;
             __clib4->uuid = c2n.uuid;
 
+			/* Get Actual Machine Type */
+			IExpansion->GetMachineInfoTags(GMIT_Machine, &__clib4->__machine_type, TAG_DONE);
+			D(bug("Using clib4 on machine type %ld", __clib4->__machine_type));
             /* Set _clib4 pointer into process pr_UID
              * This field is copied to any spawned process created by this exe and/or its children
              */
@@ -437,7 +462,7 @@ struct Clib4Library *libOpen(struct LibraryManagerInterface *Self, uint32 versio
             SHOWMSG("Check for custom memory allocator");
             if ((len = IDOS->GetVar("CLIB4_MEMORY_ALLOCATOR", envbuf, sizeof(envbuf), 0)) >= 0) {
                 if (!IUtility->Stricmp(envbuf, "1"))
-                    __clib4->__wof_mem_allocator_type = WMEM_ALLOCATOR_SIMPLE;  // WARNING - At moment this is crashing
+                    __clib4->__wof_mem_allocator_type = WMEM_ALLOCATOR_SIMPLE;
                 else if (!IUtility->Stricmp(envbuf, "2"))
                     __clib4->__wof_mem_allocator_type = WMEM_ALLOCATOR_BLOCK;
                 else if (!IUtility->Stricmp(envbuf, "3"))
@@ -454,7 +479,7 @@ struct Clib4Library *libOpen(struct LibraryManagerInterface *Self, uint32 versio
 
             /* Copy environment variables into clib4 reent structure */
             SHOWMSG("Make environment");
-            makeEnvironment(__clib4);
+			makeEnvironment(__clib4);
             if (!__clib4->__environment) {
                 __clib4->__environment = empty_env;
                 __clib4->__environment_allocated = FALSE;
@@ -463,11 +488,13 @@ struct Clib4Library *libOpen(struct LibraryManagerInterface *Self, uint32 versio
                 __clib4->__environment_allocated = TRUE;
 
             SHOWMSG("Check for custom TERM");
-            /* Set default terminal mode to "amiga-clib4" if not set */
-            LONG term_len = IDOS->GetVar("TERM", (STRPTR) term_buffer, FILENAME_MAX, 0);
-            if (term_len <= 0) {
+            /* Set default terminal mode to "amiga-clib4" if not set.
+               It is safe to call setenv() since constructors are called
+            */
+            char *terminal = getenv("TERM");
+            if (terminal == NULL) {
                 IUtility->Strlcpy(term_buffer, "amiga-clib4", FILENAME_MAX);
-                IDOS->SetVar("TERM", term_buffer, -1, GVF_LOCAL_ONLY);
+                setenv("TERM", term_buffer, true);
             }
 
             /* The following code will be executed if the program is to keep
@@ -491,6 +518,16 @@ struct Clib4Library *libOpen(struct LibraryManagerInterface *Self, uint32 versio
             SHOWMSG("Library initialized");
         }
     }
+	if (IExpansion != NULL) {
+  		IExec->DropInterface((struct Interface *) IExpansion);
+  		IExpansion = NULL;
+  	}
+
+	if (ExpansionBase != NULL) {
+		IExec->CloseLibrary(ExpansionBase);
+		ExpansionBase = NULL;
+	}
+
     return libBase;
 }
 
@@ -538,7 +575,6 @@ BPTR libExpunge(struct LibraryManagerInterface *Self) {
 
 BPTR libClose(struct LibraryManagerInterface *Self) {
     struct Clib4Library *libBase = (struct Clib4Library *) Self->Data.LibBase;
-
     struct Clib4Resource *res = (APTR) IExec->OpenResource(RESOURCE_NAME);
     if (res) {
         uint32 pid = IDOS->GetPID(0, GPID_PROCESS);
@@ -877,7 +913,7 @@ const struct Resident __attribute__((used)) RomTag = {
 int
 library_start(char *argstr,
               int arglen,
-              int (*start_main)(int, char **),
+              int (*start_main)(int, char **, char **),
               void (*__EXT_CTOR_LIST__[])(void),
               void (*__EXT_DTOR_LIST__[])(void),
               struct WBStartup *sms) {
