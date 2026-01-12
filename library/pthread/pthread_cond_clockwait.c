@@ -6,6 +6,14 @@
 #include "time_headers.h"
 #endif /* _TIME_HEADERS_H */
 
+#ifndef _STDIO_HEADERS_H
+#include "stdio_headers.h"
+#endif /* _STDIO_HEADERS_H */
+
+#ifndef _UNISTD_HEADERS_H
+#include "unistd_headers.h"
+#endif /* _UNISTD_HEADERS_H */
+
 #include "common.h"
 #include "pthread.h"
 
