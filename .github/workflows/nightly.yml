@@ -39,6 +39,7 @@ jobs:
           draft: false
           prerelease: true
           generate_release_notes: true
+          target_commitish: development
           body: >
             Builds that include most recent changes as they happen. For non 
             nightly builds check the whole list of [releases](https://github.com/AmigaLabs/clib4/releases).
@@ -74,6 +75,7 @@ jobs:
           tag_name: "nightly"
           draft: false
           prerelease: true
+          target_commitish: development
           files: |
             clib4-nightly.lha
 
@@ -108,5 +110,6 @@ jobs:
           tag_name: "nightly"
           draft: false
           prerelease: true
+          target_commitish: development
           files: |
             clib4-nightly_SPE.lha
