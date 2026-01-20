@@ -263,9 +263,9 @@ clean:
 ##############################################################################
 
 gitver:
-ifdef GITTAG
 	$(VERBOSE)sed -i 's/[(]\([0-9]*\.[0-9]*\.[0-9]*\)[)]/($(DATESTR))/g' library/c.lib_rev.h
 	$(VERBOSE)sed -i 's/"\([0-9]*\.[0-9]*\.[0-9]*\)"/"$(DATESTR)"/g' library/c.lib_rev.h
+ifdef GITTAG
 	$(VERBOSE)sed -i 's/VERSION\t*[0-9]*/VERSION\t\t\t$(MAJOR)/g' library/c.lib_rev.h
 	$(VERBOSE)sed -i 's/REVISION\t*[0-9]*/REVISION\t\t$(MINOR)/g' library/c.lib_rev.h
 	$(VERBOSE)sed -i 's/clib4.library [0-9]*\.[0-9]*/clib4.library $(MAJOR).$(MINOR)/g' library/c.lib_rev.h
