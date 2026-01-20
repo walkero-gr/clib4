@@ -61,6 +61,7 @@ jobs:
         with:
           git_tag: ""
           spe: "no"
+          nightly: "yes"
 
       - name: Create the LHA release archive
         run: |
@@ -81,7 +82,7 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     container:
-      image: walkero/amigagccondocker:os4-gcc11
+      image: walkero/amigagccondocker:os4-gcc6
       volumes:
         - '${{ github.workspace }}:/opt/code'
     steps:
@@ -94,6 +95,7 @@ jobs:
         with:
           git_tag: ""
           spe: "yes"
+          nightly: "yes"
 
       - name: Create the LHA release archive
         run: |
