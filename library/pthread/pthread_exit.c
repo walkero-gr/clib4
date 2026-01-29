@@ -46,12 +46,19 @@ pthread_exit(void *value_ptr) {
 		SHOWMSG("pthread_exit: main thread cannot exit via pthread_exit, return\n");
 		return;
 	}
+	if (inf->status == THREAD_STATE_TERMINATING || inf->status == THREAD_STATE_DESTRUCT) {
+		/* The target thread is already terminating, cannot exit */
+		return;
+	}
+
+	inf->status = THREAD_STATE_TERMINATING;
 	inf->ret = value_ptr;
 
 	// execute the clean-up handlers
 	while ((handler = (CleanupHandler *)RemTail((struct List *)&inf->cleanup)))
 		if (handler->routine)
 			handler->routine(handler->arg);
+
 	inf->status = THREAD_STATE_DESTRUCT;
 
     longjmp(inf->jmp, 1);

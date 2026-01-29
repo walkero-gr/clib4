@@ -48,10 +48,12 @@ void __pthread_exit_func(void);
 void __attribute__((constructor, used)) __pthread_init();
 void __attribute__((destructor, used)) __pthread_exit();
 
+struct MinList join_list;
 ThreadInfo threads[PTHREAD_THREADS_MAX];
 APTR thread_sem = NULL;
-TLSKey tlskeys[PTHREAD_KEYS_MAX];
 APTR tls_sem = NULL;
+TLSKey tlskeys[PTHREAD_KEYS_MAX];
+
 APTR timerMutex = NULL;
 struct TimeRequest *timedTimerIO = NULL;
 struct MsgPort *timedTimerPort = NULL;
@@ -81,6 +83,7 @@ _pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr, BOO
 
     SHOWMSG("Allocating mutex");
     mutex->mutex = AllocSysObjectTags(ASOT_MUTEX, ASOMUTEX_Recursive, recursive, TAG_DONE);
+	mutex->owner = FindTask(NULL);
     SHOWPOINTER(mutex->mutex);
 
     mutex->incond = 0;
@@ -152,8 +155,19 @@ _pthread_obtain_sema_timed(struct SignalSemaphore *sema, const struct timespec *
 
 void
 _pthread_clear_threadinfo(ThreadInfo *inf) {
+    D(("_pthread_clear_threadinfo: ENTER\n"));
+
+    /* NEVER clear threads[0] - it's reserved for main thread! */
+    if (inf == &threads[0]) {
+        D(("_pthread_clear_threadinfo: WARNING - attempted to clear threads[0] (main thread), skipping!\n"));
+        return;
+    }
+
+    D(("_pthread_clear_threadinfo: clearing thread (task value suppressed)\n"));
     memset(inf, 0, sizeof(ThreadInfo));
     inf->status = THREAD_STATE_IDLE;
+    inf->can_exit = 0;
+    D(("_pthread_clear_threadinfo: EXIT\n"));
 }
 
 int
@@ -298,6 +312,7 @@ int __pthread_init_func(void) {
     SHOWMSG("[__pthread_init_func :] Pthread __pthread_init_func called.\n");
 
     memset(&threads, 0, sizeof(threads));
+    NewMinList(&join_list);
     thread_sem = AllocSysObjectTags(ASOT_MUTEX, ASOMUTEX_Recursive, TRUE, TAG_DONE);
     tls_sem = AllocSysObjectTags(ASOT_MUTEX, ASOMUTEX_Recursive, TRUE, TAG_DONE);
 
@@ -306,9 +321,25 @@ int __pthread_init_func(void) {
     // reserve ID 0 for the main thread
     ThreadInfo *inf = &threads[0];
 
+    inf->thread_id = 0;  /* Main thread has ID 0 */
     inf->task = (struct Process *) FindTask(NULL);
     inf->status = THREAD_STATE_RUNNING;
     NewMinList(&inf->cleanup);
+
+    /* Allocate signals for main thread */
+    inf->cancel_signal = AllocSignal(-1);
+    if (inf->cancel_signal == -1) {
+        inf->cancel_signal_mask = SIGBREAKF_CTRL_C;
+    } else {
+        inf->cancel_signal_mask = 1L << inf->cancel_signal;
+    }
+
+    inf->join_signal = AllocSignal(-1);
+    if (inf->join_signal == -1) {
+        inf->join_signal_mask = SIGF_PARENT;
+    } else {
+        inf->join_signal_mask = 1L << inf->join_signal;
+    }
 
     timerMutex = AllocSysObjectTags(ASOT_MUTEX, ASOMUTEX_Recursive, TRUE, TAG_DONE);
 
@@ -326,7 +357,12 @@ int __pthread_init_func(void) {
     for (i = PTHREAD_FIRST_THREAD_ID; i < PTHREAD_THREADS_MAX; i++) {
         inf = &threads[i];
         inf->status = THREAD_STATE_IDLE;
+        inf->cancel_signal = -1; /* No signal allocated yet */
+        inf->join_signal = -1;
+        inf->join_signal_mask = 0;
+        inf->join_thread_id = 0;
     }
+
 
     return TRUE;
 }
@@ -349,6 +385,18 @@ void __pthread_exit_func(void) {
                 pthread_join(i, NULL);
         }
     }
+
+	MutexObtain(thread_sem);
+	inf = &threads[0];
+	if (inf->cancel_signal > 0 && inf->cancel_signal != -1) {
+		D(("_pthread_clear_threadinfo: Freeing cancel signal %d\n", inf->cancel_signal));
+		FreeSignal(inf->cancel_signal);
+	}
+	if (inf->join_signal > 0 && inf->join_signal != -1) {
+		D(("_pthread_clear_threadinfo: Freeing join signal %d\n", inf->join_signal));
+		FreeSignal(inf->join_signal);
+	}
+	MutexRelease(thread_sem);
 
     if (thread_sem) {
         FreeSysObject(ASOT_MUTEX, thread_sem);

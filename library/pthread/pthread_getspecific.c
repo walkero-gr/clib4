@@ -40,14 +40,32 @@
 void *
 pthread_getspecific(pthread_key_t key) {
     ThreadInfo *inf;
+    BOOL key_is_valid;
     void *value = NULL;
+
+    /* NOTE: D() macros disabled in this function to avoid potential deadlock
+     * if debug output somehow calls pthread_getspecific/setspecific while
+     * holding tls_sem mutex */
 
     if (key >= PTHREAD_KEYS_MAX || key < 0)
         return NULL;
 
+    /* Get current thread info */
     inf = GetCurrentThreadInfo();
-    if (inf != NULL)
-      value = inf->tlsvalues[key];
+    if (inf == NULL)
+        return NULL;
+
+    /* Use global lock to protect the entire operation */
+    /* This prevents race with pthread_key_delete */
+    MutexObtain(tls_sem);
+
+    /* Check if key is valid INSIDE the lock */
+    if (tlskeys[key].used) {
+        /* Read from tlsvalues INSIDE the lock to prevent race with key_delete */
+        value = inf->tlsvalues[key];
+    }
+
+    MutexRelease(tls_sem);
 
     return value;
 }
