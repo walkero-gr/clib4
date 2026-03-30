@@ -83,9 +83,15 @@ _pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr, BOO
 
     SHOWMSG("Allocating mutex");
     mutex->mutex = AllocSysObjectTags(ASOT_MUTEX, ASOMUTEX_Recursive, recursive, TAG_DONE);
-	mutex->owner = NULL;
     SHOWPOINTER(mutex->mutex);
+    /* Check for allocation failure — NULL return on OOM would crash on
+     * subsequent MutexObtain(NULL). */
+    if (mutex->mutex == NULL) {
+        LEAVE();
+        return ENOMEM;
+    }
 
+	mutex->owner = NULL;
     mutex->incond = 0;
 
     LEAVE();
@@ -103,6 +109,27 @@ static void timespec_sub(struct timespec *ts1, const struct timespec *ts2, const
         ts1->tv_sec++;
         ts1->tv_nsec -= 1000000000L;
     }
+}
+
+static void CondWaitCleanupHandler(void *arg) {
+    CondWaitCleanup *ctx = (CondWaitCleanup *) arg;
+
+    /* Remove the waiter node from the condvar's list */
+    ObtainSemaphore(ctx->cond->semaphore);
+    Remove((struct Node *) ctx->waiter);
+    ReleaseSemaphore(ctx->cond->semaphore);
+
+    /* Free the signal bit */
+    if (ctx->waiter->sigbit != SIGB_COND_FALLBACK)
+        FreeSignal(ctx->waiter->sigbit);
+
+    /* Abort and clean up timer if active */
+    if (ctx->timerio != NULL)
+        CloseTimerDevice(ctx->timerio);
+
+    /* POSIX: mutex must be re-acquired when cancelled during cond_wait */
+    pthread_mutex_lock(ctx->mutex);
+    ctx->mutex->incond--;
 }
 
 int
@@ -195,24 +222,21 @@ _pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex, const stru
     }
 
     // initialize static conditions
-    if (SemaphoreIsInvalid(cond->semaphore))
+    if (SemaphoreIsInvalid(cond->semaphore)) {
+        MutexObtain(thread_sem);
         pthread_cond_init(cond, NULL);
+        MutexRelease(thread_sem);
+    }
 
     task = FindTask(NULL);
     if (abstime) {
-        // open timer.device
-        if (!OpenTimerDevice((struct IORequest *) &timerio, &timermp, task)) {
-            CloseTimerDevice((struct IORequest *) &timerio);
-            return EINVAL;
-        }
-        // prepare the device command and send it
-        timerio.Request.io_Command = TR_ADDREQUEST;
-        timerio.Request.io_Flags = 0;
-        timerio.Time.Seconds = 0;
-        timerio.Time.Microseconds = 0;
+        // Compute relative time BEFORE opening the timer device.
+        // This way, if the deadline has already passed we can return
+        // ETIMEDOUT immediately without having to close an unsent IO
+        // (WaitIO on an unsent IORequest hangs forever).
+        struct timespec rel_time;
         if (!relative) {
             struct timespec starttime;
-            struct timespec endtime;
             // absolute time has to be converted to relative
             // First normalize abstime in case tv_nsec is out of range
             // (e.g. 32-bit overflow from caller's arithmetic)
@@ -227,31 +251,38 @@ _pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex, const stru
                 normabs.tv_nsec = (long)(uns_nsec % 1000000000UL);
             }
             clock_gettime(clock_type, &starttime);
-            timespec_sub(&endtime, &normabs, &starttime);
+            timespec_sub(&rel_time, &normabs, &starttime);
             // Normalize tv_nsec to [0, 999999999] range
-            if (endtime.tv_nsec >= 1000000000L) {
-                endtime.tv_sec += endtime.tv_nsec / 1000000000L;
-                endtime.tv_nsec = endtime.tv_nsec % 1000000000L;
+            if (rel_time.tv_nsec >= 1000000000L) {
+                rel_time.tv_sec += rel_time.tv_nsec / 1000000000L;
+                rel_time.tv_nsec = rel_time.tv_nsec % 1000000000L;
             }
-            if (endtime.tv_nsec < 0) {
-                endtime.tv_sec--;
-                endtime.tv_nsec += 1000000000L;
+            if (rel_time.tv_nsec < 0) {
+                rel_time.tv_sec--;
+                rel_time.tv_nsec += 1000000000L;
             }
             // Check if the time is already in the past
-            if (endtime.tv_sec < 0 || (endtime.tv_sec == 0 && endtime.tv_nsec <= 0)) {
-                CloseTimerDevice((struct IORequest *) &timerio);
+            if (rel_time.tv_sec < 0 || (rel_time.tv_sec == 0 && rel_time.tv_nsec <= 0)) {
                 return ETIMEDOUT;
             }
-            TIMESPEC_TO_OLD_TIMEVAL(&timerio.Time, &endtime);
         } else {
             // relative time - use abstime directly
             // Check if the time is valid
             if (abstime->tv_sec < 0 || (abstime->tv_sec == 0 && abstime->tv_nsec <= 0)) {
-                CloseTimerDevice((struct IORequest *) &timerio);
                 return ETIMEDOUT;
             }
-            TIMESPEC_TO_OLD_TIMEVAL(&timerio.Time, abstime);
+            rel_time = *abstime;
         }
+
+        // open timer.device
+        if (!OpenTimerDevice((struct IORequest *) &timerio, &timermp, task)) {
+            CloseTimerDevice((struct IORequest *) &timerio);
+            return EINVAL;
+        }
+        // prepare the device command and send it
+        timerio.Request.io_Command = TR_ADDREQUEST;
+        timerio.Request.io_Flags = 0;
+        TIMESPEC_TO_OLD_TIMEVAL(&timerio.Time, &rel_time);
         sigs |= (1 << timermp.mp_SigBit);
         SendIO((struct IORequest *) &timerio);
     }
@@ -271,7 +302,19 @@ _pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex, const stru
     // wait for the condition to be signalled or the timeout
     mutex->incond++;
     pthread_mutex_unlock(mutex);
+
+    // Push cancellation cleanup to remove waiter node if thread is cancelled during Wait
+    CondWaitCleanup cleanup_ctx;
+    cleanup_ctx.cond = cond;
+    cleanup_ctx.mutex = mutex;
+    cleanup_ctx.waiter = &waiter;
+    cleanup_ctx.timerio = abstime ? (struct IORequest *) &timerio : NULL;
+    pthread_cleanup_push(CondWaitCleanupHandler, &cleanup_ctx);
+
     sigs = Wait(sigs);
+
+    pthread_cleanup_pop(0); // don't execute — we handle cleanup below
+
     pthread_mutex_lock(mutex);
     mutex->incond--;
     // remove the node from the list
@@ -313,8 +356,11 @@ _pthread_cond_broadcast(pthread_cond_t *cond, BOOL onlyfirst) {
         return EINVAL;
 
     // initialize static conditions
-    if (SemaphoreIsInvalid(cond->semaphore))
+    if (SemaphoreIsInvalid(cond->semaphore)) {
+        MutexObtain(thread_sem);
         pthread_cond_init(cond, NULL);
+        MutexRelease(thread_sem);
+    }
 
     // signal the waiting threads
     ObtainSemaphore(cond->semaphore);
@@ -407,7 +453,9 @@ void __pthread_exit_func(void) {
             while (inf->task)
                 Delay(1);
         } else {
-            if (inf->status == THREAD_STATE_RUNNING)
+            /* Join any non-idle joinable thread, not just RUNNING.
+             * Threads in JOINING/WAITING/TERMINATING states also need cleanup. */
+            if (inf->status != THREAD_STATE_IDLE)
                 pthread_join(i, NULL);
         }
     }
