@@ -103,6 +103,13 @@ StarterFunc() {
 
     D(("StarterFunc: thread %s STARTING (task=%p inf=%p)\n", inf->name, startedTask, inf));
 
+    /* Set task pointer immediately so that pthread_self() and
+     * GetCurrentThreadInfo() work before the parent's pthread_create
+     * has returned and assigned inf->task.  Without this, a fast child
+     * can call pthread_self()/pthread_join() while inf->task is still
+     * NULL, causing GetThreadId to fail or match a stale slot. */
+    inf->task = startedTask;
+
     // set task TLS register
     set_tls_register(inf);
 
@@ -123,18 +130,20 @@ StarterFunc() {
 
 	ReplyMsg(&newThreadMessage->message);
 
-    /* Allocate signals AFTER ReplyMsg */
-    if (!inf->detached) {
-	    inf->cancel_signal = AllocSignal(-1);
-    	if (inf->cancel_signal == -1) {
-    		inf->cancel_signal_mask = SIGBREAKF_CTRL_C;
-    		D(("StarterFunc: %s AllocSignal cancel failed, fallback SIGBREAKF_CTRL_C\n", inf->name));
-    	} else {
-    		inf->cancel_signal_mask = 1L << inf->cancel_signal;
-    		D(("StarterFunc: %s allocated cancel signal %d mask 0x%lx\n", inf->name, inf->cancel_signal, (unsigned long)inf->cancel_signal_mask));
-    	}
+    /* Allocate cancel signal for ALL threads (joinable and detached).
+     * Previously this was inside the if(!detached) block, so detached
+     * threads could not be cancelled (Signal(task, 0) is a no-op). */
+    inf->cancel_signal = AllocSignal(-1);
+    if (inf->cancel_signal == -1) {
+        inf->cancel_signal_mask = SIGBREAKF_CTRL_C;
+        D(("StarterFunc: %s AllocSignal cancel failed, fallback SIGBREAKF_CTRL_C\n", inf->name));
+    } else {
+        inf->cancel_signal_mask = 1L << inf->cancel_signal;
+        D(("StarterFunc: %s allocated cancel signal %d mask 0x%lx\n", inf->name, inf->cancel_signal, (unsigned long)inf->cancel_signal_mask));
+    }
 
-        /* Allocate join signal */
+    if (!inf->detached) {
+        /* Allocate join signal (only needed for joinable threads) */
         inf->join_signal = AllocSignal(-1);
         if (inf->join_signal == -1) {
             inf->join_signal_mask = SIGF_PARENT;
@@ -201,6 +210,22 @@ StarterFunc() {
     if (stackSwapped)
         StackSwap(&stack);
 
+
+    /* Free our allocated signals in our own task context (before exit).
+     * AmigaOS FreeSignal operates on the calling task's signal set, so
+     * these must be freed here, not from pthread_join's context.
+     * Previously signals were never freed, leaking bits on every thread exit. */
+    if (inf->cancel_signal != -1 && inf->cancel_signal != SIGBREAKB_CTRL_C) {
+        FreeSignal(inf->cancel_signal);
+        inf->cancel_signal = -1;
+        inf->cancel_signal_mask = 0;
+    }
+    if (inf->join_signal != -1 && inf->join_signal != SIGB_PARENT) {
+        FreeSignal(inf->join_signal);
+        inf->join_signal = -1;
+        inf->join_signal_mask = 0;
+    }
+            
     /* NOW acquire thread_sem to atomically set DESTRUCT and search for joiner */
     MutexObtain(thread_sem);
 
@@ -210,6 +235,15 @@ StarterFunc() {
         // tell the parent thread that we are done
         D(("StarterFunc: thread %s not detached, looking for joiner\n", inf->name));
         inf->status = THREAD_STATE_DESTRUCT;
+
+        /* Clear task pointer to prevent ABA false matches.
+         * After the process exits, the OS may reuse the Process struct
+         * memory for a newly created thread.  If this slot still held
+         * the old pointer, GetThreadId / GetCurrentThreadInfo could
+         * match the stale entry, returning the wrong ThreadInfo and
+         * corrupting the join_list (leading to infinite-loop deadlock).
+         * The joiner identifies us by thread_id, not task pointer. */
+        inf->task = NULL;
 
         /* Find who is waiting to join with us */
         ThreadInfo *joiner = NULL;

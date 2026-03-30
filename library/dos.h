@@ -563,6 +563,9 @@ struct _clib4 {
     struct SignalSemaphore *socket_lock;  /* serialize bsdsocket.library calls across threads */
     void *dns_cache;   //struct dns_cache
     char resolv_search[256];
+
+    BOOL __exit_jmp_buf_valid;
+    int   __lib_open_count;      /* per-process OpenLibrary reference count */
 };
 
 #ifndef __getClib4
