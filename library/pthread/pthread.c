@@ -204,6 +204,30 @@ _pthread_clear_threadinfo(ThreadInfo *inf) {
         return;
     }
 
+    /*
+     * If the per-thread timer device was lazily opened and never closed
+     * (e.g. the thread exited via a non-standard path, or StarterFunc's
+     * cleanup was skipped), close it here before zeroing the structure.
+     *
+     * This is critical when kernel "munge" is active: without this step
+     * the slot is recycled with timerOpen=FALSE but the inline timerPort /
+     * timerIO structs still contain stale pointers (timerPort.mp_SigTask
+     * → dead task, io_Message.mn_ReplyPort → stale port).  The next
+     * OpenTimerDevice on the recycled slot re-initialises those fields,
+     * but the kernel can deliver a reply to the old, munged address before
+     * the initialisation completes, triggering a DSI at 0xCCCCCCxx.
+     */
+    if (inf->timerOpen) {
+        D(("_pthread_clear_threadinfo: closing stale timer device for slot (timerOpen=TRUE)\n"));
+        if (!CheckIO((struct IORequest *)&inf->timerIO))
+            AbortIO((struct IORequest *)&inf->timerIO);
+        WaitIO((struct IORequest *)&inf->timerIO);
+        CloseDevice((struct IORequest *)&inf->timerIO);
+        if (inf->timerPort.mp_SigBit != SIGB_TIMER_FALLBACK)
+            FreeSignal(inf->timerPort.mp_SigBit);
+        inf->timerOpen = FALSE;
+    }
+
     D(("_pthread_clear_threadinfo: clearing thread (task value suppressed)\n"));
     memset(inf, 0, sizeof(ThreadInfo));
     inf->status = THREAD_STATE_IDLE;
