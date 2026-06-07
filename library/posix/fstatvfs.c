@@ -16,7 +16,7 @@ fstatvfs(int fd, struct statvfs *buf) {
     int result = -1;
     struct _clib4 *__clib4 = __CLIB4;
     struct InfoData *info = NULL;
-    const char devicename[MAX_DOS_PATH];
+    char devicename[MAX_DOS_PATH] = {0};
 
     ENTER();
 
@@ -24,7 +24,7 @@ fstatvfs(int fd, struct statvfs *buf) {
     SHOWPOINTER(buf);
 
     struct fd *fildes = __get_file_descriptor(__clib4, fd);
-    if (fildes == NULL) {
+    if (fildes == NULL || fildes->fd_File == BZERO) {
         __set_errno_r(__clib4, EBADF);
         goto out;
     }
@@ -67,7 +67,7 @@ fstatvfs(int fd, struct statvfs *buf) {
 
             buf->f_namemax = maxlength;
             /* Populate the missing statvfs structure */
-            strncpy(buf->f_mntonname, devicename, 255);
+            strlcpy(buf->f_mntonname, devicename, sizeof(buf->f_mntonname));
 
             /* Skip DOSType checking if Disk is not present (for example on ICD0, IDF0 and so on..) */
             if (info->id_DiskType != ID_NO_DISK_PRESENT) {
@@ -86,7 +86,7 @@ fstatvfs(int fd, struct statvfs *buf) {
             }
             else {
                 /* If disk is not present set file system type to UNKNOWN */
-                strcpy(buf->f_fstypename, "UNKNOWN");
+                strlcpy(buf->f_fstypename, "UNKNOWN", sizeof(buf->f_fstypename));
             }
             result = 0;
         } else {

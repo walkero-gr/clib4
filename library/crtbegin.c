@@ -1,7 +1,7 @@
 /*
-* $Id: crtbegin.c,v 1.3 2022-03-09 21:07:25 clib4devs Exp $
-* Modified to add EH frame support for C++ exceptions
-  */
+ * $Id: crtbegin.c,v 1.4 2026-03-11 21:07:25 clib4devs Exp $
+ */
+
 #undef __USE_INLINE__
 #define __NOLIBBASE__
 #define __NOGLOBALIFACE__
@@ -10,6 +10,7 @@
 #include <exec/types.h>
 #endif /* EXEC_TYPES_H */
 
+#include <stdint.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/utility.h>
@@ -87,15 +88,19 @@ static struct object frame_object;
 /* Register exception handling frame information */
 static void
 __register_frame_info_clib4(void) {
-    if (__register_frame_info)
+    /* Verify that __register_frame_info is actually available and points to valid code */
+    if (__register_frame_info && (uintptr_t)__register_frame_info > 0x1000) {
         __register_frame_info(__EH_FRAME_BEGIN__, &frame_object);
+    }
 }
 
 /* Deregister exception handling frame information */
 static void
 __deregister_frame_info_clib4(void) {
-    if (__deregister_frame_info)
+    /* Verify that __deregister_frame_info is actually available and points to valid code */
+    if (__deregister_frame_info && (uintptr_t)__deregister_frame_info > 0x1000) {
         __deregister_frame_info(__EH_FRAME_BEGIN__);
+    }
 }
 
 /* ===== END EH FRAME SUPPORT ===== */
@@ -171,9 +176,6 @@ clib4_start(char *args, const int32 arglen, struct Library *sysbase) {
     r13 = &_SDA_BASE_;
     SysBase = sysbase;
 
-    /* Register exception handling frames EARLY, before any C++ code runs */
-    __register_frame_info_clib4();
-
     iexec = (struct ExecIFace *) ((struct ExecBase *) SysBase)->MainInterface;
     iexec->Obtain();
 
@@ -214,9 +216,6 @@ clib4_start(char *args, const int32 arglen, struct Library *sysbase) {
     else {
         iexec->Alert(AT_Recovery | AG_OpenLib | AO_DOSLib);
     }
-
-    /* Deregister EH frames before cleanup */
-    __deregister_frame_info_clib4();
 
     CloseLibraryInterface(iexec, (struct Interface *) iclib4);
     CloseLibraryInterface(iexec, (struct Interface *) IUtility);

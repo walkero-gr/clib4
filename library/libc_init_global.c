@@ -74,6 +74,7 @@ reent_init(struct _clib4 *__clib4, const BOOL fallback) {
         .error = BZERO,
         /* Disable check abort at start */
         .__check_abort_enabled = FALSE,
+        .__exit_jmp_buf_valid = FALSE,
         .__break_signal_mask = SIGBREAKF_CTRL_C,
         ._errno = 0,
         .__shell_escape_character = '*',
@@ -152,9 +153,20 @@ reent_init(struct _clib4 *__clib4, const BOOL fallback) {
         .isTZSet = 0,
         .__IDebug = NULL,
         .resolv_conf = NULL,
+        .dns_cache = NULL,
+        .resolv_lock = NULL,
+        .socket_lock = NULL,
         .__file_lock_semaphore_name = "Advisory File Locking",
-        .__command_line_ptr = NULL
+        .__command_line_ptr = NULL,
+        /* SHM per-process tracking */
+        .__shm_tracking_count = 0
     };
+
+    /* Initialize SHM tracking slots to -1 (unused) */
+    for (int _i = 0; _i < __SHM_TRACKING_MAX; _i++) {
+        __clib4->__shm_tracking[_i].id = -1;
+        __clib4->__shm_tracking[_i].addr = NULL;
+    }
 
     if (!__clib4->__random_lock || !__clib4->__pipe_semaphore) {
         goto out;
@@ -169,6 +181,21 @@ reent_init(struct _clib4 *__clib4, const BOOL fallback) {
 
     __clib4->resolv_conf = AllocVecTags(sizeof(struct resolvconf), AVT_Type, MEMF_SHARED, AVT_ClearWithValue, 0, TAG_DONE);
     if (!__clib4->resolv_conf) {
+        goto out;
+    }
+
+    __clib4->dns_cache = AllocVecTags(sizeof(struct dns_cache), AVT_Type, MEMF_SHARED, AVT_ClearWithValue, 0, TAG_DONE);
+    if (!__clib4->dns_cache) {
+        goto out;
+    }
+
+    __clib4->resolv_lock = __create_semaphore();
+    if (!__clib4->resolv_lock) {
+        goto out;
+    }
+
+    __clib4->socket_lock = __create_semaphore();
+    if (!__clib4->socket_lock) {
         goto out;
     }
 
@@ -191,6 +218,14 @@ reent_init(struct _clib4 *__clib4, const BOOL fallback) {
     __clib4->wide_status->_wcsrtombs_state.__value.__wch = 0;
     __clib4->wide_status->_l64a_buf[0] = '\0';
     __clib4->wide_status->_getdate_err = 0;
+
+	/* Allocate alarm signal */
+	__clib4->_interrupting_alarm_signal_num = AllocSignal(-1);
+	if (__clib4->_interrupting_alarm_signal_num == -1) {
+		D(("Cannot allocate alarm signal!"));
+		goto out;
+	}
+	__clib4->_interrupting_alarm_signal = 1U << __clib4->_interrupting_alarm_signal_num;
 
     ClearMem(__clib4->action_array, NSIG * sizeof(struct sigaction));
 
@@ -265,17 +300,43 @@ reent_init(struct _clib4 *__clib4, const BOOL fallback) {
 out:
 
     if (!success) {
-        reent_exit(__clib4);
+    	if (__clib4) {
+    		reent_exit(__clib4);
+    		SHOWMSG("Freeing __clib4 instance pointer");
+    		FreeVec(__clib4);
+    		SHOWMSG("Fallback __clib4 destroyed correctly");
+    	}
     }
 }
 
 void
 reent_exit(struct _clib4 *__clib4) {
     /* Free global clib structure */
-    if (__clib4) {
-        if (__clib4->resolv_conf != NULL) {
+
+	if (__clib4) {
+    	if (__clib4->_interrupting_alarm_signal_num >= 0) {
+    		FreeSignal(__clib4->_interrupting_alarm_signal_num);
+    		__clib4->_interrupting_alarm_signal_num = -1;
+    	}
+
+    	if (__clib4->dns_cache != NULL) {
+            FreeVec(__clib4->dns_cache);
+            __clib4->dns_cache = NULL;
+        }
+
+    	if (__clib4->resolv_conf != NULL) {
             FreeVec(__clib4->resolv_conf);
             __clib4->resolv_conf = NULL;
+        }
+
+        if (__clib4->resolv_lock != NULL) {
+            __delete_semaphore(__clib4->resolv_lock);
+            __clib4->resolv_lock = NULL;
+        }
+
+        if (__clib4->socket_lock != NULL) {
+            __delete_semaphore(__clib4->socket_lock);
+            __clib4->socket_lock = NULL;
         }
 
         /* Free wchar stuff */
@@ -304,10 +365,6 @@ reent_exit(struct _clib4 *__clib4) {
             __clib4->__dl_root_handle = NULL;
             SHOWMSG("Done");
         }
-
-        FreeVec(__clib4);
-        __clib4 = NULL;
-        SHOWMSG("__clib4 destroyed correctly");
     }
 }
 

@@ -104,11 +104,16 @@ call_main(
     volatile LONG saved_io_err;
 
     ENTER();
+    
+    /* Mark that call_main() is being executed (normal executable, not -nostartfiles) */
+    __clib4->__call_main_executed = TRUE;
+    
     /* This plants the return buffer for _exit(). */
     if (setjmp(__clib4->__exit_jmp_buf) != 0) {
         D(("Back from longjmp"));
         goto out;
     }
+    __clib4->__exit_jmp_buf_valid = TRUE;
 
     SHOWMSG("Initialize shared objects");
     shared_obj_init(__clib4, TRUE);
